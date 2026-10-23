@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STK Push Dispatcher Bot</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --success: #22c55e;
+      --danger: #ef4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      color: var(--accent);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    label {
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    input, textarea {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.75rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .tag-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      min-height: 48px;
+    }
+
+    .tag {
+      background: #334155;
+      color: var(--text);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .tag button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .tag button:hover {
+      color: var(--danger);
+    }
+
+    .tag-input {
+      border: none;
+      background: transparent;
+      flex: 1;
+      min-width: 150px;
+      padding: 0.25rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    button.btn-submit {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 0.85rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      width: 100%;
+      font-size: 1rem;
+    }
+
+    button.btn-submit:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .logs {
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .log-success { color: var(--success); }
+    .log-failed { color: var(--danger); }
+
+    .file-upload {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="card">
+      <h2>STK Push Batch Dispatcher</h2>
+      
+      <div class="form-group">
+        <label>Phone Numbers (Type & press Enter/Comma, or paste bulk list)</label>
+        <div class="tag-container" id="tagContainer">
+          <input type="text" id="phoneInput" class="tag-input" placeholder="e.g. 254712345678" />
+        </div>
+        <input type="file" id="fileInput" accept=".csv, .txt" class="file-upload" />
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Amount (KES)</label>
+          <input type="number" id="amount" value="500" />
+        </div>
+        <div class="form-group">
+          <label>Reference Prefix</label>
+          <input type="text" id="reference" value="ORD" />
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <input type="text" id="description" value="Order Payment" />
+      </div>
+
+      <button id="submitBtn" class="btn-submit" onclick="startDispatch()">Start Batch Dispatch</button>
+    </div>
+
+    <div class="card">
+      <h2>Live Progress & Logs</h2>
+      <p id="statusSummary" style="font-size: 0.9rem; color: var(--text-muted);">Status: Idle</p>
+      <div class="logs" id="logBox"></div>
+    </div>
+  </div>
+
+  <script>
+    const numbersList = new Set();
+    const phoneInput = document.getElementById('phoneInput');
+    const tagContainer = document.getElementById('tagContainer');
+    const fileInput = document.getElementById('fileInput');
+
+    function renderTags() {
+      document.querySelectorAll('.tag').forEach(tag => tag.remove());
+      numbersList.forEach(num => {
+        const tag = document.createElement('div');
+        tag.className = 'tag';
+        tag.innerHTML = `${num} <button onclick="removeNumber('${num}')">&times;</button>`;
+        tagContainer.insertBefore(tag, phoneInput);
+      });
+    }
+
+    function addNumber(val) {
+      const cleaned = val.replace(/[^0-9]/g, '');
+      if (cleaned.length >= 9) {
+        numbersList.add(cleaned);
+      }
+    }
+
+    function removeNumber(num) {
+      numbersList.delete(num);
+      renderTags();
+    }
+
+    phoneInput.addEventListener('keydown', (e) => {
+      if (['Enter', ','].includes(e.key)) {
+        e.preventDefault();
+        if (phoneInput.value.trim()) {
+          addNumber(phoneInput.value.trim());
+          phoneInput.value = '';
+          renderTags();
+        }
+      }
+    });
+
+    phoneInput.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const paste = (e.clipboardData || window.clipboardData).getData('text');
+      const tokens = paste.split(/[\n,;\s]+/);
+      tokens.forEach(addNumber);
+      phoneInput.value = '';
+      renderTags();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const tokens = evt.target.result.split(/[\n,;\s]+/);
+        tokens.forEach(addNumber);
+        renderTags();
+      };
+      reader.readAsText(file);
+    });
+
+    async function startDispatch() {
+      if (numbersList.size === 0) return alert('Please enter at least one phone number.');
+
+      const payload = {
+        numbers: Array.from(numbersList),
+        amount: Number(document.getElementById('amount').value),
+        referencePrefix: document.getElementById('reference').value,
+        description: document.getElementById('description').value
+      };
+
+      document.getElementById('submitBtn').disabled = true;
+
+      const res = await fetch('/api/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error);
+        document.getElementById('submitBtn').disabled = false;
+        return;
+      }
+
+      pollStatus();
+    }
+
+    async function pollStatus() {
+      const interval = setInterval(async () => {
+        const res = await fetch('/api/status');
+        const { isProcessing, progress } = await res.json();
+
+        document.getElementById('statusSummary').innerText = 
+          `Processed: ${progress.processed}/${progress.total} | Successful: ${progress.successful} | Failed: ${progress.failed}`;
+
+        const logBox = document.getElementById('logBox');
+        logBox.innerHTML = progress.logs.map(l => 
+          `<div class="log-item">
+            <span>${l.phone}</span>
+            <span class="${l.status === 'SUCCESS' ? 'log-success' : 'log-failed'}">${l.status}</span>
+          </div>`
+        ).join('');
+        
+        logBox.scrollTop = logBox.scrollHeight;
+
+        if (!isProcessing && progress.processed > 0) {
+          clearInterval(interval);
+          document.getElementById('submitBtn').disabled = false;
+        }
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
