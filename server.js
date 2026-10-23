@@ -29,7 +29,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sendStkPush(phone, amount, reference, description) {
   try {
-    const response = await fetch("https://api.snapearn.co.ke/api/stk-push.php", {
+    // Updated to the correct endpoint without the .php extension
+    const response = await fetch("https://api.snapearn.co.ke/api/stk-push", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${SNAPEARN_API_KEY}`,
@@ -51,7 +52,6 @@ async function sendStkPush(phone, amount, reference, description) {
       data = { rawResponse: responseText };
     }
 
-    // Explicitly print the outcome to your Render/terminal logs for debugging
     console.log(`[API Response] Status: ${response.status}`, JSON.stringify(data));
 
     return { success: response.ok, status: response.status, data };
